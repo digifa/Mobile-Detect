@@ -8,11 +8,6 @@ use PHPUnit\Framework\TestCase;
 
 final class MobileDetectWithCacheTest extends TestCase
 {
-    /**
-     * @var MobileDetect
-     */
-    protected MobileDetect $detect;
-
     public function testFlattenHeaders()
     {
         $detect = new MobileDetect();

@@ -29,6 +29,7 @@ namespace Detection;
 use BadMethodCallException;
 use Detection\Cache\Cache;
 use Detection\Cache\CacheException;
+use Detection\Cache\CacheItem;
 use Detection\Exception\MobileDetectException;
 use Psr\Cache\InvalidArgumentException;
 use Psr\SimpleCache\CacheInterface;
@@ -223,7 +224,7 @@ use Psr\SimpleCache\CacheInterface;
  * @method bool isConsole()
  * @method bool isWatch()
  */
-class MobileDetect
+class MobileDetect implements MobileDetectInterface
 {
     /**
      * A cache for resolved matches
@@ -239,6 +240,13 @@ class MobileDetect
      */
     protected string $VERSION = '4.8.06';
 
+    /**
+     * Configuration settings for the Symfony application
+     *
+     * @var array $config
+     * @property bool $autoInitOfHttpHeaders If true, auto-initializes HTTP headers from $_SERVER['HTTP...']
+     * @property int $maximumUserAgentLength Maximum length of HTTP User-Agent value allowed
+     */
     protected array $config = [
         // Auto-initialization on HTTP headers from $_SERVER['HTTP...']
         // Disable this if you're going for performance and set the
@@ -254,16 +262,6 @@ class MobileDetect
      * A frequently used regular expression to extract version #s.
      */
     protected const VERSION_REGEX = '([\w._\+]+)';
-
-    /**
-     * A type for the version() method indicating a string return value.
-     */
-    private const VERSION_TYPE_STRING = 'text';
-
-    /**
-     * A type for the version() method indicating a float return value.
-     */
-    private const VERSION_TYPE_FLOAT = 'float';
 
     /**
      * The User-Agent HTTP header is stored in here.
@@ -287,6 +285,9 @@ class MobileDetect
         'HTTP_CLOUDFRONT_IS_DESKTOP_VIEWER'
     ];
 
+    /**
+     * User-Agent string for Amazon CloudFront requests
+     */
     protected static string $cloudFrontUA = 'Amazon CloudFront';
 
     /**
@@ -1138,11 +1139,22 @@ class MobileDetect
         return $this->httpHeaders;
     }
 
+    /**
+     * Checks if the object has HTTP headers.
+     *
+     * @return bool Returns true if the object has HTTP headers, false otherwise.
+     */
     public function hasHttpHeaders(): bool
     {
         return count($this->httpHeaders) > 0;
     }
 
+    /**
+     * Checks if the specified HTTP header exists in the stored array of HTTP headers.
+     *
+     * @param string $name The name of the HTTP header to check.
+     * @return bool Returns true if the HTTP header with the specified name exists and has a non-empty value, false otherwise.
+     */
     protected function hasHttpHeader(string $name): bool
     {
         return !empty($this->httpHeaders[$name]);
@@ -1179,6 +1191,11 @@ class MobileDetect
         return null;
     }
 
+    /**
+     * Retrieves the known mobile positive headers.
+     *
+     * @return array The known mobile positive headers as an array.
+     */
     public function getMobileHeaders(): array
     {
         return static::$knownMobilePositiveHeaders;
@@ -1240,21 +1257,41 @@ class MobileDetect
         return $this->userAgent;
     }
 
+    /**
+     * Check if the Symfony application has a user agent string set.
+     *
+     * @return bool Returns true if the user agent is set and is a string, false otherwise.
+     */
     public function hasUserAgent(): bool
     {
         return is_string($this->userAgent);
     }
 
+    /**
+     * Check if the user agent is empty.
+     *
+     * @return bool Returns true if the user agent is empty, false otherwise.
+     */
     public function isUserAgentEmpty(): bool
     {
         return $this->hasUserAgent() && $this->userAgent === '';
     }
 
+    /**
+     * Get the matching regex for the Symfony application.
+     *
+     * @return string|null The matching regex for the Symfony application, or null if not set.
+     */
     public function getMatchingRegex(): ?string
     {
         return $this->matchingRegex;
     }
 
+    /**
+     * Gets the matches array.
+     *
+     * @return ?array Returns the matches array if available, or null if not set.
+     */
     public function getMatchesArray(): ?array
     {
         return $this->matchesArray;
@@ -1354,6 +1391,7 @@ class MobileDetect
     /**
      * Magic overloading method.
      *
+     * @phpstan-ignore-next-line
      * @method boolean is[...]()
      * @param string $name
      * @param array $arguments
@@ -1394,8 +1432,8 @@ class MobileDetect
         try {
             $cacheKey = $this->createCacheKey("mobile");
             $cacheItem = $this->cache->get($cacheKey);
-            if (!is_null($cacheItem)) {
-                return $cacheItem->get();
+            if ($cacheItem instanceof CacheItem) {
+                return (bool)$cacheItem->get();
             }
 
             // Special case: Amazon CloudFront mobile viewer
@@ -1440,8 +1478,8 @@ class MobileDetect
         try {
             $cacheKey = $this->createCacheKey("tablet");
             $cacheItem = $this->cache->get($cacheKey);
-            if (!is_null($cacheItem)) {
-                return $cacheItem->get();
+            if ($cacheItem instanceof CacheItem) {
+                return (bool)$cacheItem->get();
             }
 
             // Special case: Amazon CloudFront mobile viewer
@@ -1509,8 +1547,8 @@ class MobileDetect
         try {
             $cacheKey = $this->createCacheKey($ruleName);
             $cacheItem = $this->cache->get($cacheKey);
-            if ($cacheItem) {
-                return $cacheItem->get();
+            if ($cacheItem instanceof CacheItem) {
+                return (bool)$cacheItem->get();
             }
 
             $result = $this->matchUserAgentWithRule($ruleName);
@@ -1532,14 +1570,18 @@ class MobileDetect
      * This method will be used to check custom regexes against
      * the User-Agent string.
      *
-     * @param string $regex
-     * @param string $userAgent
+     * @param string|null $regex
+     * @param string|null $userAgent
      * @return bool
      *
      * @todo: search in the HTTP headers too.
      */
-    public function match(string $regex, string $userAgent): bool
+    public function match(?string $regex, ?string $userAgent): bool
     {
+        if (!$regex || !$userAgent) {
+            return false;
+        }
+
         $match = (bool) preg_match(sprintf('#%s#is', $regex), $userAgent, $matches);
         // If positive match is found, store the results for debug.
         if ($match) {
@@ -1672,7 +1714,7 @@ class MobileDetect
                 $propertyPattern = str_replace('[VER]', self::VERSION_REGEX, $propertyMatchString);
 
                 // Identify and extract the version.
-                preg_match(sprintf('#%s#is', $propertyPattern), $this->userAgent, $match);
+                preg_match(sprintf('#%s#is', $propertyPattern), (string)$this->userAgent, $match);
 
                 if (false === empty($match[1])) {
                     return ($type == self::VERSION_TYPE_FLOAT ? $this->prepareVersionNo($match[1]) : $match[1]);
@@ -1683,11 +1725,23 @@ class MobileDetect
         return false;
     }
 
-    public function getCache(): Cache
+    /**
+     * Retrieves the Cache object used for caching.
+     *
+     * @return CacheInterface The Cache object used for caching in the application.
+     */
+    public function getCache(): CacheInterface
     {
         return $this->cache;
     }
 
+    /**
+     * Create a cache key based on the provided key, user agent, and HTTP headers.
+     *
+     * @param string $key The original key to be used in generating the cache key.
+     * @return string The base64 encoded cache key that includes the original key, user agent (if available),
+     *                  and HTTP headers (if available).
+     */
     protected function createCacheKey(string $key): string
     {
         $userAgentKey = $this->hasUserAgent() ? $this->userAgent : '';
@@ -1696,6 +1750,13 @@ class MobileDetect
         return base64_encode("$key:$userAgentKey:$httpHeadersKey");
     }
 
+    /**
+     * Flatten HTTP headers into a single string.
+     *
+     * @param array $httpHeaders An associative array containing HTTP headers.
+     * @return string A string representation of HTTP headers with name and value pairs separated by a colon and a space,
+     * each pair on a new line.
+     */
     public static function flattenHeaders(array $httpHeaders): string
     {
         $key = '';

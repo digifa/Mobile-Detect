@@ -474,4 +474,21 @@ final class MobileDetectGeneralTest extends TestCase
         $rules = $md->getRules();
         $this->assertCount($count, $rules);
     }
+
+    /**
+     * @throws MobileDetectException
+     */
+    public function testValidHeadersThatContainsCleanChromeHttpUserAgentHeaderButSecChUaModelIsSet()
+    {
+        $detect = new MobileDetect();
+        $detect->setHttpHeaders([
+            'HTTP_CONNECTION'       => 'close',
+            'HTTP_ACCEPT'           => 'text/vnd.wap.wml, application/json, text/javascript, */*; q=0.01',
+            'HTTP_USER_AGENT'       => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+            'HTTP_SEC_CH_UA_MOBILE'      => '?1',
+            'HTTP_SEC_CH_UA_MODEL'  => 'SM-X300',
+        ]);
+        $this->assertTrue($detect->isMobile());
+        $this->assertTrue($detect->isTablet());
+    }
 }

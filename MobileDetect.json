@@ -47,6 +47,9 @@
         "HTTP_CLOUDFRONT_IS_TABLET_VIEWER",
         "HTTP_CLOUDFRONT_IS_DESKTOP_VIEWER"
     ],
+    "secChUaHeaders": [
+      "HTTP_SEC_CH_UA_MODEL"
+    ],
     "uaMatch": {
         "phones": {
             "iPhone": "\\biPhone\\b|\\biPod\\b",

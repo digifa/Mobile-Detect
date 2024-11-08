@@ -950,6 +950,10 @@ class MobileDetect
         'HTTP_X_UCBROWSER_DEVICE_UA'
     ];
 
+    protected static array $knownSecChUaHeaders = [
+        'HTTP_SEC_CH_UA_MODEL'
+    ];
+
     /**
      * The individual segments that could exist in a User-Agent string. VER refers to the regular
      * expression defined in the constant self::VERSION_REGEX.
@@ -1070,7 +1074,8 @@ class MobileDetect
         $knownHttpHeaders = array_merge(
             array_values(self::$knownUserAgentHttpHeaders),
             array_keys(self::$knownMobilePositiveHeaders),
-            array_values(self::$knownCloudFrontHeaders)
+            array_values(self::$knownCloudFrontHeaders),
+            array_values(self::$knownSecChUaHeaders)
         );
 
         // Did not iterate through global $_SERVER to find ['HTTP...'] header values
@@ -1206,6 +1211,11 @@ class MobileDetect
     public function getCloudFrontHttpHeaders(): array
     {
         return static::$knownCloudFrontHeaders;
+    }
+
+    public function getSecChUaHeaders(): array
+    {
+        return static::$knownSecChUaHeaders;
     }
 
     /**
@@ -1455,15 +1465,25 @@ class MobileDetect
                 return true;
             }
 
+            $secChUaModelHeader = $this->getHttpHeader('HTTP_SEC_CH_UA_MODEL');
+
             foreach (static::$tabletDevices as $_regex) {
                 $regexString = $_regex;
                 // "regex" is array of "strings"
                 if (is_array($_regex)) {
                     $regexString = implode("|", $_regex);
                 }
+
                 if ($this->match($regexString, $this->getUserAgent())) {
                     $this->cache->set($cacheKey, true);
                     return true;
+                }
+
+                if ($secChUaModelHeader) {
+                    if ($this->match($regexString, $secChUaModelHeader)) {
+                        $this->cache->set($cacheKey, true);
+                        return true;
+                    }
                 }
 
 //                if (is_array($_regex)) {
